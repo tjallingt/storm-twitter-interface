@@ -101,6 +101,13 @@ function updateSetting(setting, value) {
 	redis.publish('update-cache', 'all');
 }
 
+function updateFilterList(socket) {
+	redis.lrange('filterList', 0, -1).then((result) => {
+		const tweets = result.map(JSON.parse);
+		socket.emit('filterList', tweets);
+	});
+}
+
 // Communicate with clients
 io.on('connect', (socket) => {
 	getSettings().then((settings) => {
@@ -108,6 +115,8 @@ io.on('connect', (socket) => {
 	});
 	socket.on('alter-setting', data => updateSetting(data.setting, data.value));
 	socket.on('update-filter', () => redis.publish('update-filter', 'all'));
+	updateFilterList(socket);
+	setInterval(() => updateFilterList(socket), 5000);
 });
 
 sub.subscribe('update-cache');

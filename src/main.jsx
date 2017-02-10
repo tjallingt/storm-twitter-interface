@@ -5,6 +5,8 @@ import io from 'socket.io-client';
 import EditableList from './components/EditableList';
 import EditableUserList from './components/EditableUserList';
 import Panel from './components/Panel';
+import TweetList from './components/TweetList';
+
 
 export default class Main extends React.Component {
 	constructor(props) {
@@ -14,10 +16,13 @@ export default class Main extends React.Component {
 			this.setState({ settings });
 			console.log(settings);
 		});
+		this.socket.on('filterList', (data) => {
+			this.setState({ filterList: data });
+		});
 	}
 
 	state = {
-		data: {},
+		filterList: [],
 		settings: {
 			blacklist: {},
 			filter: {},
@@ -80,6 +85,13 @@ export default class Main extends React.Component {
 								onAdd={this.alterSetting('add:blacklist:user')}
 								onRemove={this.alterSetting('remove:blacklist:user')}
 							/>
+						</Panel>
+					</div>
+				</div>
+				<div className="row">
+					<div className="col-lg-12">
+						<Panel title="FilterList">
+							<TweetList tweets={this.state.filterList} />
 						</Panel>
 					</div>
 				</div>
