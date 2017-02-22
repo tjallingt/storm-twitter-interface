@@ -26,7 +26,7 @@ export default class EditableList extends React.Component {
 					<span
 						style={{
 							display: 'inline-block',
-							width: 200,
+							minWidth: 200,
 						}}
 					>
 						{item}

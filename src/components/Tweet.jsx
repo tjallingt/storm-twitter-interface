@@ -12,6 +12,22 @@ function getTweetText(tweet) {
 	return tweet.truncated ? tweet.extended_tweet.full_text : tweet.text;
 }
 
+const styles = {
+	tweet: {
+		margin: 10,
+	},
+	retweet: {
+		padding: 10,
+		marginTop: 5,
+		border: '1px solid #ddd',
+		borderRadius: 4,
+	},
+	title: {
+		margin: 0,
+		fontWeight: 600,
+	},
+};
+
 function getTweetDisplayText(tweet) {
 	let text = getTweetText(tweet);
 	const entities = getTweetEntities(tweet);
@@ -36,28 +52,28 @@ function getTweetDisplayText(tweet) {
 	return text;
 }
 
-function Tweet({ tweet }) {
+function Tweet({ tweet, retweet }) {
 	if (tweet.retweeted_status) {
 		return (
-			<li>
-				<b>@{tweet.user.screen_name}</b> retweeted:
-				<ul>
-					<Tweet tweet={tweet.retweeted_status} />
-				</ul>
-			</li>
+			<div style={styles.tweet}>
+				<p style={styles.title}>@{tweet.user.screen_name} retweeted</p>
+				<Tweet tweet={tweet.retweeted_status} retweet />
+			</div>
 		);
 	}
 	const text = getTweetDisplayText(tweet);
 	// const media = getTweetEntities(tweet).media;
 	return (
-		<li>
-			<b>@{tweet.user.screen_name}</b>: {text}
-		</li>
+		<div style={retweet ? styles.retweet : styles.tweet}>
+			<p style={styles.title}>@{tweet.user.screen_name} tweeted</p>
+			{text}
+		</div>
 	);
 }
 
 Tweet.propTypes = {
 	tweet: React.PropTypes.object.isRequired,
+	retweet: React.PropTypes.bool,
 };
 
 export default Tweet;

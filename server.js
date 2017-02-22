@@ -41,6 +41,15 @@ app.get('/api/users/search', (req, res) => {
 		.catch(error => res.status(500).json(error));
 });
 
+app.get('/api/users/show', (req, res) => {
+	console.log('user/show');
+	twitter.get('users/show', { screen_name: req.query.screen_name })
+		.then(response => response.data)
+		.then(data => filterUserData(data))
+		.then(data => res.json(data))
+		.catch(error => res.status(500).json(error));
+});
+
 app.get('/api/users/lookup', (req, res) => {
 	twitter.get('users/lookup', { user_id: req.query.user_id })
 		.then(response => response.data)
@@ -55,6 +64,9 @@ function getSettings() {
 		.smembers('settings:blacklist:users')
 		.smembers('settings:filter:track')
 		.smembers('settings:filter:follow')
+		.smembers('settings:status:languages')
+		.getbit('settings:status:retweets', 0)
+		.getbit('settings:status:sensitive', 0)
 		.exec()
 		.then(result => ({
 			blacklist: {
@@ -65,58 +77,81 @@ function getSettings() {
 				track: result[2][1],
 				follow: result[3][1],
 			},
+			status: {
+				languages: result[4][1],
+				retweets: !!result[5][1],
+				sensitive: !!result[6][1],
+			},
 		}));
 }
 
-function updateSetting(setting, value) {
-	switch (setting) {
-	case 'add:blacklist:word':
-		redis.sadd('settings:blacklist:words', value);
+function getData() {
+	return redis.pipeline()
+		.lrange('data:tweets:removed', 0, -1)
+		.smembers('data:analysis:keywords')
+		.exec()
+		.then(result => ({
+			removed: result[0][1].map(JSON.parse),
+			keywords: result[1][1],
+		}));
+}
+
+function updateSetting(key, action, value) {
+	switch (key) {
+	case 'settings:blacklist:words':
+	case 'settings:blacklist:users':
+	case 'settings:filter:track':
+	case 'settings:filter:follow':
+	case 'settings:status:languages':
+		if (action === 'add') {
+			redis.sadd(key, value);
+		} else if (action === 'remove') {
+			redis.srem(key, value);
+		} else {
+			console.error('Unknown action.', 'key', key, 'action', action, 'value', value);
+		}
 		break;
-	case 'add:blacklist:user':
-		redis.sadd('settings:blacklist:users', value);
-		break;
-	case 'add:filter:track':
-		redis.sadd('settings:filter:track', value);
-		break;
-	case 'add:filter:follow':
-		redis.sadd('settings:filter:follow', value);
-		break;
-	case 'remove:blacklist:word':
-		redis.srem('settings:blacklist:words', value);
-		break;
-	case 'remove:blacklist:user':
-		redis.srem('settings:blacklist:users', value);
-		break;
-	case 'remove:filter:track':
-		redis.srem('settings:filter:track', value);
-		break;
-	case 'remove:filter:follow':
-		redis.srem('settings:filter:follow', value);
+	case 'settings:status:retweets':
+	case 'settings:status:sensitive':
+		if (action === 'set') {
+			redis.setbit(key, 0, value ? 1 : 0);
+		} else {
+			console.error('Unknown action.', 'key', key, 'action', action, 'value', value);
+		}
 		break;
 	default:
-		console.error('Attempting to update unknown setting:', setting);
+		console.error('Unknown key.', 'key', key, 'action', action, 'value', value);
 		return;
 	}
 	redis.publish('update-cache', 'all');
 }
 
-function updateFilterList(socket) {
-	redis.lrange('filterList', 0, -1).then((result) => {
-		const tweets = result.map(JSON.parse);
-		socket.emit('filterList', tweets);
-	});
+function updateData(key, action, value) {
+	switch (key) {
+	case 'data:analysis:keywords':
+		if (action === 'remove') {
+			redis.srem(key, value);
+		} else {
+			console.error('Unknown action.', 'key', key, 'action', action, 'value', value);
+		}
+		break;
+	default:
+		console.error('Unknown key.', 'key', key, 'action', action, 'value', value);
+		return;
+	}
+	getData().then(data => io.sockets.emit('update-data', data));
 }
 
 // Communicate with clients
 io.on('connect', (socket) => {
-	getSettings().then((settings) => {
-		socket.emit('update-settings', settings);
-	});
-	socket.on('alter-setting', data => updateSetting(data.setting, data.value));
+	getSettings().then(settings => socket.emit('update-settings', settings));
+	socket.on('alter-setting', data => updateSetting(data.key, data.action, data.value));
+	socket.on('alter-data', data => updateData(data.key, data.action, data.value));
 	socket.on('update-filter', () => redis.publish('update-filter', 'all'));
-	updateFilterList(socket);
-	setInterval(() => updateFilterList(socket), 5000);
+	getData().then(data => socket.emit('update-data', data));
+	setInterval(() => {
+		getData().then(data => socket.emit('update-data', data));
+	}, 5000);
 });
 
 sub.subscribe('update-cache');

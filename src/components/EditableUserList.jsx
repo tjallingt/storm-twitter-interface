@@ -63,6 +63,10 @@ export default class EditableUserList extends React.Component {
 	addUser = (user) => {
 		this.lastAddedUser = user;
 		this.props.onAdd(user.id);
+		this.setState({
+			search: '',
+			results: [],
+		});
 	};
 
 	handleChange = (event) => {
@@ -87,7 +91,7 @@ export default class EditableUserList extends React.Component {
 				<span
 					style={{
 						display: 'inline-block',
-						width: 200,
+						minWidth: 200,
 					}}
 				>
 					@{user.name}
